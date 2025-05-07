@@ -1,16 +1,25 @@
 import mongoose from "mongoose";
 
 export const Deadline = mongoose.model('Deadline', new mongoose.Schema({
-    title: String,
-    deadline: String
+    title: {
+        en: { type: String },
+        fr: { type: String}
+    },
+    date: { type: String}
 }));
 
 export const UpcomingEvent = mongoose.model('UpcomingEvent', new mongoose.Schema({
-    title: String,
-    date: String
+    title:  {
+        en: { type: String },
+        fr: { type: String}
+    },
+    date: { type: String}
 }));
 
 export const PopularTopic = mongoose.model('PopularTopic', new mongoose.Schema({
-    title: String
+    title:  {
+        en: { type: String },
+        fr: { type: String}
+    }
 }));
 

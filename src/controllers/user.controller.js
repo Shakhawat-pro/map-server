@@ -4,13 +4,36 @@ import { Event } from "../models/Event.js";
 const getUserByEmail = async (req, res) => {
   const { email } = req.params;
   try {
-      const user = await User.findOne({ email });
-      if (!user) {
-          return res.status(200).json(null);
-      }
-      res.json(user);
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json(null);
+    }
+    res.json({
+      success: true,
+      data: user
+    });
   } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch user' });
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+};
+const getPrivateUserByEmail = async (req, res) => {
+  const { email } = req.params;
+  if (email !== req.decoded.email) {
+    return res.status(401).send({ message: 'Unauthorized Access' })
+  }
+
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json(null);
+    }
+    res.json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch user' });
   }
 };
 
@@ -28,8 +51,8 @@ const createUser = async (req, res) => {
       });
     } else {
       // Create new user since they don't exist
-      console.log(req.body);
-      
+      // console.log(req.body);
+
       user = await User.create(req.body);
       return res.status(201).json({
         success: true,
@@ -49,8 +72,8 @@ const createUser = async (req, res) => {
 const removeUser = async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
-    console.log('asdfasdfasdfd');
-    
+    // console.log('asdfasdfasdfd');
+
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
     res.json({
       success: true,
@@ -68,6 +91,8 @@ const removeUser = async (req, res) => {
 
 const makeAdminRole = async (req, res) => {
   try {
+     console.log('clicked', req.query);
+
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { role: "admin" },
@@ -124,12 +149,14 @@ const removeAdminRole = async (req, res) => {
   }
 };
 
+
 const updateProfile = async (req, res) => {
-  const { mobileNumber, address, occupation } = req.body;
+  // console.log('clicked',req.body)
+  const { mobileNumber, address, occupation, profilePicture, name } = req.body;
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { mobileNumber, address, occupation },
+    const user = await User.findOneAndUpdate(
+      { email: req.params.email },
+      { mobileNumber, address, occupation, profilePicture, name },
       { new: true }
     );
     res.json({
@@ -153,8 +180,24 @@ const getAllUsers = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const users = await User.find().skip(skip).limit(limit);
-    const totalUsers = await User.countDocuments();
+    const { name, email, role } = req.query;
+
+    // Build dynamic filter object
+    const filter = {};
+
+    if (name) {
+      filter.name = { $regex: name, $options: 'i' }; // case-insensitive match
+    }
+    if (email) {
+      filter.email = { $regex: email, $options: 'i' };
+    }
+    if (role) {
+      filter.role = role; // exact match (or you can use regex if needed)
+    }
+
+    const users = await User.find(filter).skip(skip).limit(limit);
+    const totalUsers = await User.countDocuments(filter);
+
     res.status(200).json({
       success: true,
       message: "Users fetched successfully",
@@ -173,11 +216,18 @@ const getAllUsers = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
 // Add event to favorites
 const addFavorite = async (req, res) => {
   try {
-    const { userId, eventId } = req.params;
-    
+    const { email } = req.params;
+    const { eventId } = req.body;
+
     // Check if event exists
     const event = await Event.findById(eventId);
     if (!event) {
@@ -188,8 +238,8 @@ const addFavorite = async (req, res) => {
     }
 
     // Add to favorites if not already there
-    const user = await User.findByIdAndUpdate(
-      userId,
+    const user = await User.findOneAndUpdate(
+      { email },
       { $addToSet: { favorites: eventId } },
       { new: true }
     ).populate('favorites');
@@ -211,10 +261,11 @@ const addFavorite = async (req, res) => {
 // Remove event from favorites
 const removeFavorite = async (req, res) => {
   try {
-    const { userId, eventId } = req.params;
-    
-    const user = await User.findByIdAndUpdate(
-      userId,
+    const { email } = req.params;
+    const { eventId } = req.body;
+
+    const user = await User.findOneAndUpdate(
+      { email },
       { $pull: { favorites: eventId } },
       { new: true }
     ).populate('favorites');
@@ -236,9 +287,13 @@ const removeFavorite = async (req, res) => {
 // Get user's favorite events
 const getFavorites = async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId)
-      .populate('favorites');
-    
+    const { email } = req.params;
+
+    if (email !== req.decoded.email) {
+      return res.status(401).send({ message: 'Unauthorized Access' })
+    }
+    const user = await User.findOne({ email }).populate('favorites');
+
     res.status(200).json({
       success: true,
       message: "Favorites retrieved successfully",
@@ -252,9 +307,32 @@ const getFavorites = async (req, res) => {
     });
   }
 };
+// Get user's favorite events IDs
+const getFavoritesIds = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ email }).select('favorites');
+    const favoriteIds = user.favorites;
+    res.status(200).json({
+      success: true,
+      message: "Favorites IDs retrieved successfully",
+      data: favoriteIds
+    });
+  }
+  catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to get favorites IDs",
+      error: error.message
+    });
+  }
+}
+
+
 
 export const UserController = {
   getUserByEmail,
+  getPrivateUserByEmail,
   createUser,
   removeUser,
   makeAdminRole,
@@ -263,6 +341,7 @@ export const UserController = {
   getAllUsers,
   addFavorite,
   removeFavorite,
-  getFavorites
+  getFavorites,
+  getFavoritesIds,
 }
 
